@@ -28,40 +28,24 @@ function setMode(mode){const photo=mode==='photo';$('photoTab').classList.toggle
 $('photoTab').onclick=()=>setMode('photo');$('quizTab').onclick=()=>setMode('quiz');
 function redAt(r,g,b){return r>72&&r-g>20&&r-b>12&&r>g*1.10&&r>b*1.07;}
 function buildRegions(mask,w,h){
-  const rowHas=new Uint8Array(h);
-  for(let y=0;y<h;y++){let n=0;const row=y*w;for(let x=0;x<w;x++)if(mask[row+x])n++;rowHas[y]=n>=2?1:0;}
-  const bands=[];let s=-1,gap=0;
-  for(let y=0;y<h;y++){
-    if(rowHas[y]){if(s<0)s=y;gap=0;}
-    else if(s>=0){gap++;if(gap>10){bands.push([s,y-gap]);s=-1;gap=0;}}
-  }
-  if(s>=0)bands.push([s,h-1]);
+  // 元のタップ範囲に戻す：画像を固定サイズのタイルに分け、
+  // 赤い画素を含むタイルを1つのタップ対象にする。
+  const tileWidth=112,tileHeight=39;
+  const cols=Math.ceil(w/tileWidth),rows=Math.ceil(h/tileHeight);
   const regions=[];
-  for(const [y0,y1] of bands){
-    const xHas=new Uint8Array(w);
-    for(let x=0;x<w;x++){let n=0;for(let y=y0;y<=y1;y++)if(mask[y*w+x]){n++;if(n>=1)break;}xHas[x]=n?1:0;}
-    let xStart=-1,xGap=0;
-    for(let x=0;x<w;x++){
-      if(xHas[x]){if(xStart<0)xStart=x;xGap=0;}
-      else if(xStart>=0){xGap++;if(xGap>26){const xEnd=x-xGap;regions.push({x:xStart,y:y0,w:xEnd-xStart+1,h:y1-y0+1});xStart=-1;xGap=0;}}
-    }
-    if(xStart>=0)regions.push({x:xStart,y:y0,w:w-xStart,h:y1-y0+1});
-  }
-  const padX=Math.max(4,Math.round(w/280)),padY=Math.max(3,Math.round(h/420));
-  const expanded=regions.map(r=>({x:Math.max(0,r.x-padX),y:Math.max(0,r.y-padY),w:Math.min(w, r.w+padX*2),h:Math.min(h,r.h+padY*2)})).filter(r=>r.w*r.h>=18);
-  // Merge vertically overlapping boxes that belong to the same red phrase.
-  const merged=[];
-  for(const r of expanded){
-    let joined=false;
-    for(const m of merged){
-      const xOverlap=Math.min(m.x+m.w,r.x+r.w)-Math.max(m.x,r.x), yGap=Math.max(m.y,r.y)-Math.min(m.y+m.h,r.y+r.h);
-      if(xOverlap>Math.min(m.w,r.w)*0.45 && yGap<10){
-        const x=Math.min(m.x,r.x),y=Math.min(m.y,r.y),x2=Math.max(m.x+m.w,r.x+r.w),y2=Math.max(m.y+m.h,r.y+r.h);m.x=x;m.y=y;m.w=x2-x;m.h=y2-y;joined=true;break;
+  for(let ty=0;ty<rows;ty++){
+    for(let tx=0;tx<cols;tx++){
+      let found=false;
+      const x0=tx*tileWidth,y0=ty*tileHeight;
+      const x1=Math.min(w,x0+tileWidth),y1=Math.min(h,y0+tileHeight);
+      for(let y=y0;y<y1&&!found;y++){
+        const row=y*w;
+        for(let x=x0;x<x1;x++)if(mask[row+x]){found=true;break;}
       }
+      if(found)regions.push({x:x0,y:y0,w:x1-x0,h:y1-y0});
     }
-    if(!joined)merged.push({...r});
   }
-  return merged;
+  return regions;
 }
 function processImage(img){
  const maxW=1600,maxH=2400,scale=Math.min(1,maxW/img.naturalWidth,maxH/img.naturalHeight),w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
